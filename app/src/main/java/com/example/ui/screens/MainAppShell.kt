@@ -140,42 +140,16 @@ fun MainAppShell(viewModel: MainViewModel) {
                         modifier = Modifier.padding(vertical = 2.dp)
                     )
 
-                    val isBookmarksSelected = currentScreen is ScreenState.Bookmarks
-                    NavigationDrawerItem(
-                        icon = {
-                            Icon(
-                                imageVector = if (isBookmarksSelected) Icons.Filled.Bookmark else Icons.Outlined.Bookmark,
-                                contentDescription = "Bookmarks",
-                                modifier = Modifier.size(22.dp)
-                            )
-                        },
-                        label = { Text("Bookmarks", fontWeight = if (isBookmarksSelected) FontWeight.SemiBold else FontWeight.Normal) },
-                        selected = isBookmarksSelected,
-                        onClick = {
-                            viewModel.navigateTo(ScreenState.Bookmarks)
-                            coroutineScope.launch { drawerState.close() }
-                        },
-                        colors = NavigationDrawerItemDefaults.colors(
-                            selectedContainerColor = accent.copy(alpha = 0.18f),
-                            selectedTextColor = accent,
-                            selectedIconColor = accent,
-                            unselectedTextColor = palette.textPrimary,
-                            unselectedIconColor = palette.textSecondary
-                        ),
-                        shape = CircleShape,
-                        modifier = Modifier.padding(vertical = 2.dp)
-                    )
-
                     val isActorsSelected = currentScreen is ScreenState.Actors || currentScreen is ScreenState.ActorScenes
                     NavigationDrawerItem(
                         icon = {
                             Icon(
                                 painter = painterResource(R.drawable.ic_actor_placeholder),
-                                contentDescription = "Actors",
+                                contentDescription = "Actor",
                                 modifier = Modifier.size(22.dp)
                             )
                         },
-                        label = { Text("Actors", fontWeight = if (isActorsSelected) FontWeight.SemiBold else FontWeight.Normal) },
+                        label = { Text("Actor", fontWeight = if (isActorsSelected) FontWeight.SemiBold else FontWeight.Normal) },
                         selected = isActorsSelected,
                         onClick = {
                             viewModel.navigateTo(ScreenState.Actors)
@@ -197,14 +171,40 @@ fun MainAppShell(viewModel: MainViewModel) {
                         icon = {
                             Icon(
                                 painter = painterResource(R.drawable.ic_video_camera),
-                                contentDescription = "Studios",
+                                contentDescription = "Studio",
                                 modifier = Modifier.size(22.dp)
                             )
                         },
-                        label = { Text("Studios", fontWeight = if (isStudiosSelected) FontWeight.SemiBold else FontWeight.Normal) },
+                        label = { Text("Studio", fontWeight = if (isStudiosSelected) FontWeight.SemiBold else FontWeight.Normal) },
                         selected = isStudiosSelected,
                         onClick = {
                             viewModel.navigateTo(ScreenState.Studios)
+                            coroutineScope.launch { drawerState.close() }
+                        },
+                        colors = NavigationDrawerItemDefaults.colors(
+                            selectedContainerColor = accent.copy(alpha = 0.18f),
+                            selectedTextColor = accent,
+                            selectedIconColor = accent,
+                            unselectedTextColor = palette.textPrimary,
+                            unselectedIconColor = palette.textSecondary
+                        ),
+                        shape = CircleShape,
+                        modifier = Modifier.padding(vertical = 2.dp)
+                    )
+
+                    val isBookmarksSelected = currentScreen is ScreenState.Bookmarks
+                    NavigationDrawerItem(
+                        icon = {
+                            Icon(
+                                imageVector = if (isBookmarksSelected) Icons.Filled.Bookmark else Icons.Outlined.Bookmark,
+                                contentDescription = "Bookmark",
+                                modifier = Modifier.size(22.dp)
+                            )
+                        },
+                        label = { Text("Bookmark", fontWeight = if (isBookmarksSelected) FontWeight.SemiBold else FontWeight.Normal) },
+                        selected = isBookmarksSelected,
+                        onClick = {
+                            viewModel.navigateTo(ScreenState.Bookmarks)
                             coroutineScope.launch { drawerState.close() }
                         },
                         colors = NavigationDrawerItemDefaults.colors(
@@ -227,7 +227,7 @@ fun MainAppShell(viewModel: MainViewModel) {
                                 modifier = Modifier.size(22.dp)
                             )
                         },
-                        label = { Text("StashDB", fontWeight = if (isStashDbSelected) FontWeight.SemiBold else FontWeight.Normal) },
+                        label = { Text("StashDb", fontWeight = if (isStashDbSelected) FontWeight.SemiBold else FontWeight.Normal) },
                         selected = isStashDbSelected,
                         onClick = {
                             viewModel.navigateTo(ScreenState.StashDb)
