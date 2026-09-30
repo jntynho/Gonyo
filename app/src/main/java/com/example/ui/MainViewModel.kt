@@ -131,13 +131,64 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val screenStack = mutableListOf<ScreenState>(ScreenState.Home)
 
-    // Home Feed Scroll Position Memory
+    private val _canNavigateBack = MutableStateFlow(false)
+    val canNavigateBack: StateFlow<Boolean> = _canNavigateBack.asStateFlow()
+
+    // Home & Bookmarks Scroll Position Memory
     var homeScrollIndex: Int = 0
     var homeScrollOffset: Int = 0
+    var bookmarksScrollIndex: Int = 0
+    var bookmarksScrollOffset: Int = 0
     var initialSettingsSection: String? = null
+
+    private fun isTopLevelScreen(screen: ScreenState): Boolean {
+        return screen is ScreenState.Home ||
+                screen is ScreenState.Actors ||
+                screen is ScreenState.Studios ||
+                screen is ScreenState.Bookmarks ||
+                screen is ScreenState.StashDb
+    }
+
+    private fun getDrawerScreenIndex(screen: ScreenState): Int {
+        return when (screen) {
+            is ScreenState.Home -> 0
+            is ScreenState.Actors -> 1
+            is ScreenState.Studios -> 2
+            is ScreenState.Bookmarks -> 3
+            is ScreenState.StashDb -> 4
+            else -> 99
+        }
+    }
 
     fun navigateTo(screen: ScreenState) {
         if (screen == _screenState.value) return
+        
+        // Cleanly stop any playing inline card video before starting transition
+        _activeInlineVideo.value = null
+
+        if (screen is ScreenState.Home) {
+            _navDirection.value = NavigationDirection.BACK
+            screenStack.clear()
+            screenStack.add(ScreenState.Home)
+            _screenState.value = ScreenState.Home
+            _canNavigateBack.value = false
+            return
+        }
+
+        val current = _screenState.value
+        if (isTopLevelScreen(current) && isTopLevelScreen(screen)) {
+            // Lateral transition between top-level drawer items
+            val currentRank = getDrawerScreenIndex(current)
+            val targetRank = getDrawerScreenIndex(screen)
+            _navDirection.value = if (targetRank < currentRank) NavigationDirection.BACK else NavigationDirection.FORWARD
+            screenStack.clear()
+            screenStack.add(ScreenState.Home)
+            screenStack.add(screen)
+            _screenState.value = screen
+            _canNavigateBack.value = true
+            return
+        }
+
         val existingIndex = screenStack.indexOf(screen)
         if (existingIndex >= 0 && existingIndex < screenStack.size - 1) {
             _navDirection.value = NavigationDirection.BACK
@@ -149,15 +200,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             screenStack.add(screen)
         }
         _screenState.value = screen
+        _canNavigateBack.value = screenStack.size > 1
     }
 
     fun navigateBack(): Boolean {
+        _activeInlineVideo.value = null
         if (screenStack.size > 1) {
             _navDirection.value = NavigationDirection.BACK
             screenStack.removeAt(screenStack.size - 1)
             _screenState.value = screenStack.last()
+            _canNavigateBack.value = screenStack.size > 1
             return true
         }
+        _canNavigateBack.value = false
         return false
     }
 

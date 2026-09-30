@@ -325,15 +325,6 @@ fun ExoPlayerOverlay(
         }
     }
 
-    // Back button behavior inside player
-    BackHandler {
-        if (isLandscape) {
-            activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-        } else {
-            onClose()
-        }
-    }
-
     val activeHeaders = remember(selectedQuality, defaultHeaders) {
         val streamHeaders = selectedQuality?.headers ?: emptyMap()
         defaultHeaders + streamHeaders

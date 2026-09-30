@@ -149,8 +149,8 @@ fun StashDbScreen(
     val searchError by viewModel.stashSearchError.collectAsStateWithLifecycle()
     val totalScenesCount by viewModel.stashTotalScenesCount.collectAsStateWithLifecycle()
 
-    // System Back Press Handling
-    BackHandler {
+    // System Back Press Handling (Intercept only when selection or search is active)
+    BackHandler(enabled = selectedSceneIds.isNotEmpty() || isSearchExpanded) {
         if (selectedSceneIds.isNotEmpty()) {
             viewModel.clearStashSelection()
         } else if (isSearchExpanded) {
@@ -158,8 +158,6 @@ fun StashDbScreen(
             focusManager.clearFocus()
             viewModel.setStashSearchExpanded(false)
             viewModel.setStashSearchQuery("")
-        } else {
-            viewModel.navigateTo(ScreenState.Home)
         }
     }
 

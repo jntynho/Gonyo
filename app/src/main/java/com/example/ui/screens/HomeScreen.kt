@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring
@@ -131,6 +132,12 @@ fun HomeScreen(
     var activeOverlayCardId by remember { mutableStateOf<String?>(null) }
     var showEditActorDialog by remember { mutableStateOf(false) }
     var showEditStudioDialog by remember { mutableStateOf(false) }
+
+    // Intercept back button when search is open so it closes search first
+    BackHandler(enabled = isSearchExpanded) {
+        isSearchExpanded = false
+        viewModel.searchQuery.value = ""
+    }
 
     val listState = rememberLazyListState(
         initialFirstVisibleItemIndex = viewModel.homeScrollIndex,

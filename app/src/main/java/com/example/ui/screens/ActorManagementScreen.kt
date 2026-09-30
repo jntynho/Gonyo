@@ -70,13 +70,24 @@ fun ActorManagementScreen(
     var sortOption by remember { mutableStateOf(ManagementSortOption.NAME_AZ) }
     var showSortMenu by remember { mutableStateOf(false) }
 
-    val sortedActors = remember(actors, links, sortOption) {
+    val sortedActors = remember(actors, sortOption) {
         when (sortOption) {
             ManagementSortOption.NAME_AZ -> actors.sortedBy { it.name.lowercase() }
             ManagementSortOption.NAME_ZA -> actors.sortedByDescending { it.name.lowercase() }
             ManagementSortOption.NEWEST -> actors.sortedByDescending { it.createdAt }
             ManagementSortOption.OLDEST -> actors.sortedBy { it.createdAt }
         }
+    }
+
+    // O(1) Precomputed scene count lookup map for zero-lag composition
+    val actorSceneCounts = remember(links) {
+        val counts = mutableMapOf<String, Int>()
+        links.forEach { link ->
+            link.actorIds.forEach { id ->
+                counts[id] = (counts[id] ?: 0) + 1
+            }
+        }
+        counts
     }
 
     val prominentCardBg = when (palette.name.lowercase()) {
@@ -204,7 +215,7 @@ fun ActorManagementScreen(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(sortedActors, key = { it.id }) { actor ->
-                    val sceneCount = links.count { it.actorIds.contains(actor.id) }
+                    val sceneCount = actorSceneCounts[actor.id] ?: 0
                     val itemContent = @Composable {
                         Column(
                             modifier = Modifier

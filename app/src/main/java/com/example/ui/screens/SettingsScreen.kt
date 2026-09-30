@@ -154,17 +154,21 @@ fun SettingsScreen(
             targetState = currentSection,
             transitionSpec = {
                 if (targetState != SettingsSection.MAIN_MENU) {
-                    (fadeIn(animationSpec = androidx.compose.animation.core.tween(200)) +
-                            slideInHorizontally { width -> width / 3 })
+                    (fadeIn(animationSpec = androidx.compose.animation.core.tween(220, easing = androidx.compose.animation.core.LinearOutSlowInEasing)) +
+                            slideInHorizontally(animationSpec = androidx.compose.animation.core.tween(240, easing = androidx.compose.animation.core.FastOutSlowInEasing)) { width -> width / 4 })
                         .togetherWith(
-                            fadeOut(animationSpec = androidx.compose.animation.core.tween(150))
+                            fadeOut(animationSpec = androidx.compose.animation.core.tween(180, easing = androidx.compose.animation.core.FastOutLinearInEasing)) +
+                                    slideOutHorizontally(animationSpec = androidx.compose.animation.core.tween(200, easing = androidx.compose.animation.core.FastOutLinearInEasing)) { width -> -width / 10 }
                         )
+                        .apply { targetContentZIndex = 1f }
                 } else {
-                    fadeIn(animationSpec = androidx.compose.animation.core.tween(200))
+                    (fadeIn(animationSpec = androidx.compose.animation.core.tween(220, easing = androidx.compose.animation.core.LinearOutSlowInEasing)) +
+                            slideInHorizontally(animationSpec = androidx.compose.animation.core.tween(240, easing = androidx.compose.animation.core.FastOutSlowInEasing)) { width -> -width / 10 })
                         .togetherWith(
-                            fadeOut(animationSpec = androidx.compose.animation.core.tween(150)) +
-                                    slideOutHorizontally { width -> width / 3 }
+                            fadeOut(animationSpec = androidx.compose.animation.core.tween(180, easing = androidx.compose.animation.core.FastOutLinearInEasing)) +
+                                    slideOutHorizontally(animationSpec = androidx.compose.animation.core.tween(220, easing = androidx.compose.animation.core.FastOutLinearInEasing)) { width -> width / 4 }
                         )
+                        .apply { targetContentZIndex = 0f }
                 }
             },
             label = "settings_navigation"

@@ -60,12 +60,39 @@ fun StudioManagementScreen(
     var sortOption by remember { mutableStateOf(ManagementSortOption.NAME_AZ) }
     var showSortMenu by remember { mutableStateOf(false) }
 
-    val sortedStudios = remember(studios, links, sortOption) {
+    val sortedStudios = remember(studios, sortOption) {
         when (sortOption) {
             ManagementSortOption.NAME_AZ -> studios.sortedBy { it.name.lowercase() }
             ManagementSortOption.NAME_ZA -> studios.sortedByDescending { it.name.lowercase() }
             ManagementSortOption.NEWEST -> studios.sortedByDescending { it.createdAt }
             ManagementSortOption.OLDEST -> studios.sortedBy { it.createdAt }
+        }
+    }
+
+    // O(1) Precomputed scene count lookup map for zero-lag composition
+    val studioSceneCounts = remember(links) {
+        val counts = mutableMapOf<String, Int>()
+        links.forEach { link ->
+            link.studioIds.forEach { id ->
+                counts[id] = (counts[id] ?: 0) + 1
+            }
+        }
+        counts
+    }
+
+    // O(1) Precomputed logo background color map
+    val studioBgColors = remember(studios, palette.surface) {
+        studios.associate { studio ->
+            val color = if (!studio.logoBgColor.isNullOrEmpty()) {
+                try {
+                    Color(android.graphics.Color.parseColor(studio.logoBgColor))
+                } catch (e: Exception) {
+                    palette.surface
+                }
+            } else {
+                palette.surface
+            }
+            studio.id to color
         }
     }
 
@@ -199,7 +226,8 @@ fun StudioManagementScreen(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(sortedStudios, key = { it.id }) { studio ->
-                    val sceneCount = links.count { it.studioIds.contains(studio.id) }
+                    val sceneCount = studioSceneCounts[studio.id] ?: 0
+                    val bgColor = studioBgColors[studio.id] ?: palette.surface
                     val itemContent = @Composable {
                         Column(
                             modifier = Modifier
@@ -208,15 +236,6 @@ fun StudioManagementScreen(
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             val isBetaTest = LocalBetaTestPrivacy.current
-                            val bgColor = if (!studio.logoBgColor.isNullOrEmpty()) {
-                                try {
-                                    Color(android.graphics.Color.parseColor(studio.logoBgColor))
-                                } catch (e: Exception) {
-                                    palette.surface
-                                }
-                            } else {
-                                palette.surface
-                            }
 
                             Box(
                                 modifier = Modifier

@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -70,7 +71,25 @@ fun BookmarksScreen(
     var showSortMenu by remember { mutableStateOf(false) }
     var activeOverlayCardId by remember { mutableStateOf<String?>(null) }
 
-    val listState = rememberLazyListState()
+    // Intercept back button when search is open so it closes search first
+    BackHandler(enabled = isSearchExpanded) {
+        isSearchExpanded = false
+        viewModel.searchQuery.value = ""
+    }
+
+    val listState = rememberLazyListState(
+        initialFirstVisibleItemIndex = viewModel.bookmarksScrollIndex,
+        initialFirstVisibleItemScrollOffset = viewModel.bookmarksScrollOffset
+    )
+
+    // Continuously remember user's scroll position
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }
+            .collect { (index, offset) ->
+                viewModel.bookmarksScrollIndex = index
+                viewModel.bookmarksScrollOffset = offset
+            }
+    }
 
     var isInitialComposition by remember { mutableStateOf(true) }
     var previousSort by remember { mutableStateOf(currentSort) }

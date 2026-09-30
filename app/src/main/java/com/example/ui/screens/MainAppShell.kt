@@ -62,8 +62,11 @@ fun MainAppShell(viewModel: MainViewModel) {
         appEntranceVisible = true
     }
 
-    // Handle back button press
-    BackHandler(enabled = true) {
+    val canNavigateBack by viewModel.canNavigateBack.collectAsStateWithLifecycle()
+    val isBackHandlingActive = activeLightbox != null || activeVideo != null || drawerState.isOpen || canNavigateBack
+
+    // Handle back button press cleanly without trapping the user at root
+    BackHandler(enabled = isBackHandlingActive) {
         if (activeLightbox != null) {
             viewModel.closeLightbox()
         } else if (activeVideo != null) {
@@ -71,10 +74,7 @@ fun MainAppShell(viewModel: MainViewModel) {
         } else if (drawerState.isOpen) {
             coroutineScope.launch { drawerState.close() }
         } else {
-            val handled = viewModel.navigateBack()
-            if (!handled) {
-                // At root, let system handle exit
-            }
+            viewModel.navigateBack()
         }
     }
 
@@ -279,9 +279,7 @@ fun MainAppShell(viewModel: MainViewModel) {
     ) {
         AnimatedVisibility(
             visible = appEntranceVisible,
-            enter = slideInVertically(
-                animationSpec = tween(340, easing = FastOutSlowInEasing)
-            ) { fullHeight -> fullHeight / 5 } + fadeIn(animationSpec = tween(300)),
+            enter = fadeIn(animationSpec = tween(320, easing = LinearOutSlowInEasing)),
             modifier = Modifier.fillMaxSize()
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
@@ -291,51 +289,61 @@ fun MainAppShell(viewModel: MainViewModel) {
                         AnimatedContent(
                             targetState = currentScreen,
                             transitionSpec = {
+                                val isBack = navDirection == MainViewModel.NavigationDirection.BACK
+                                val contentZIndex = if (isBack) 0f else 1f
                                 when (transitionStyle) {
                                     4 -> {
                                         // Option 4: Vertical Slide v2 (lighter fade-through vertical slide)
-                                        val back = navDirection == MainViewModel.NavigationDirection.BACK
-                                        (fadeIn(tween(180, delayMillis = 70, easing = LinearOutSlowInEasing)) +
+                                        (fadeIn(tween(220, easing = LinearOutSlowInEasing)) +
                                             slideInVertically(tween(260, easing = FastOutSlowInEasing)) { h ->
-                                                if (back) -h / 24 else h / 14
+                                                if (isBack) -h / 20 else h / 16
                                             })
-                                            .togetherWith(fadeOut(tween(80, easing = FastOutLinearInEasing)))
-                                            .using(null)
+                                            .togetherWith(
+                                                fadeOut(tween(160, easing = FastOutLinearInEasing)) +
+                                                slideOutVertically(tween(200, easing = FastOutLinearInEasing)) { h ->
+                                                    if (isBack) h / 16 else -h / 20
+                                                }
+                                            )
+                                            .apply { targetContentZIndex = contentZIndex }
                                     }
                                     1 -> {
                                         // Option 1: Fade-Through Slide
-                                        if (navDirection == MainViewModel.NavigationDirection.BACK) {
+                                        if (isBack) {
                                             (fadeIn(animationSpec = tween(220, easing = LinearOutSlowInEasing)) +
-                                                    slideInHorizontally(animationSpec = tween(240, easing = FastOutSlowInEasing)) { width -> -width / 12 })
+                                                    slideInHorizontally(animationSpec = tween(240, easing = FastOutSlowInEasing)) { width -> -width / 10 })
                                                 .togetherWith(
-                                                    fadeOut(animationSpec = tween(180)) +
-                                                            slideOutHorizontally(animationSpec = tween(220)) { width -> width / 12 }
+                                                    fadeOut(animationSpec = tween(180, easing = FastOutLinearInEasing)) +
+                                                            slideOutHorizontally(animationSpec = tween(220, easing = FastOutLinearInEasing)) { width -> width / 10 }
                                                 )
+                                                .apply { targetContentZIndex = 0f }
                                         } else {
                                             (fadeIn(animationSpec = tween(240, easing = LinearOutSlowInEasing)) +
-                                                    slideInHorizontally(animationSpec = tween(260, easing = FastOutSlowInEasing)) { width -> width / 12 })
+                                                    slideInHorizontally(animationSpec = tween(260, easing = FastOutSlowInEasing)) { width -> width / 10 })
                                                 .togetherWith(
-                                                    fadeOut(animationSpec = tween(180)) +
-                                                            slideOutHorizontally(animationSpec = tween(220)) { width -> -width / 12 }
+                                                    fadeOut(animationSpec = tween(180, easing = FastOutLinearInEasing)) +
+                                                            slideOutHorizontally(animationSpec = tween(220, easing = FastOutLinearInEasing)) { width -> -width / 10 }
                                                 )
+                                                .apply { targetContentZIndex = 1f }
                                         }
                                     }
                                     else -> {
                                         // Option 0: Vertical Slide v2
-                                        if (navDirection == MainViewModel.NavigationDirection.BACK) {
+                                        if (isBack) {
                                             (slideInVertically(animationSpec = tween(280, easing = FastOutSlowInEasing)) { fullHeight -> -fullHeight / 10 } +
                                                     fadeIn(animationSpec = tween(240)))
                                                 .togetherWith(
-                                                    slideOutVertically(animationSpec = tween(300, easing = FastOutSlowInEasing)) { fullHeight -> fullHeight / 4 } +
+                                                    slideOutVertically(animationSpec = tween(300, easing = FastOutSlowInEasing)) { fullHeight -> fullHeight / 8 } +
                                                             fadeOut(animationSpec = tween(240))
                                                 )
+                                                .apply { targetContentZIndex = 0f }
                                         } else {
-                                            (slideInVertically(animationSpec = tween(320, easing = FastOutSlowInEasing)) { fullHeight -> fullHeight / 4 } +
+                                            (slideInVertically(animationSpec = tween(320, easing = FastOutSlowInEasing)) { fullHeight -> fullHeight / 8 } +
                                                     fadeIn(animationSpec = tween(280)))
                                                 .togetherWith(
                                                     slideOutVertically(animationSpec = tween(280, easing = FastOutSlowInEasing)) { fullHeight -> -fullHeight / 10 } +
                                                             fadeOut(animationSpec = tween(220))
                                                 )
+                                                .apply { targetContentZIndex = 1f }
                                         }
                                     }
                                 }
@@ -376,26 +384,38 @@ fun MainAppShell(viewModel: MainViewModel) {
             }
 
             // GoPlayer / ExoPlayer Video Player Overlay
-            activeVideo?.let { video ->
-                GoPlayer(
-                    title = video.title,
-                    qualities = video.qualities,
-                    subtitles = video.subtitles,
-                    defaultHeaders = video.headers,
-                    initialPositionMs = video.initialPositionMs,
-                    startInLandscape = video.startInLandscape,
-                    exoPlayer = viewModel.sharedPlayerManager.getPlayer(),
-                    onClose = { viewModel.closeVideo() }
-                )
+            AnimatedVisibility(
+                visible = activeVideo != null,
+                enter = fadeIn(tween(240)) + scaleIn(tween(240), initialScale = 0.96f),
+                exit = fadeOut(tween(180)) + scaleOut(tween(180), targetScale = 0.96f)
+            ) {
+                activeVideo?.let { video ->
+                    GoPlayer(
+                        title = video.title,
+                        qualities = video.qualities,
+                        subtitles = video.subtitles,
+                        defaultHeaders = video.headers,
+                        initialPositionMs = video.initialPositionMs,
+                        startInLandscape = video.startInLandscape,
+                        exoPlayer = viewModel.sharedPlayerManager.getPlayer(),
+                        onClose = { viewModel.closeVideo() }
+                    )
+                }
             }
 
             // High-Res Photoset Lightbox Overlay
-            activeLightbox?.let { (images, startIndex) ->
-                PhotosetLightbox(
-                    images = images,
-                    initialIndex = startIndex,
-                    onClose = { viewModel.closeLightbox() }
-                )
+            AnimatedVisibility(
+                visible = activeLightbox != null,
+                enter = fadeIn(tween(240)) + scaleIn(tween(240), initialScale = 0.96f),
+                exit = fadeOut(tween(180)) + scaleOut(tween(180), targetScale = 0.96f)
+            ) {
+                activeLightbox?.let { (images, startIndex) ->
+                    PhotosetLightbox(
+                        images = images,
+                        initialIndex = startIndex,
+                        onClose = { viewModel.closeLightbox() }
+                    )
+                }
             }
 
             // Video Resolving / Debrid Progress Overlay (Only for non-card actions, cards handle inline)
