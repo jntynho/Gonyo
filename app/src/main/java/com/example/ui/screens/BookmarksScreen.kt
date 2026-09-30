@@ -77,17 +77,19 @@ fun BookmarksScreen(
         viewModel.searchQuery.value = ""
     }
 
+    val initialScrollPos = remember { viewModel.getScrollPosition("bookmarks") }
     val listState = rememberLazyListState(
-        initialFirstVisibleItemIndex = viewModel.bookmarksScrollIndex,
-        initialFirstVisibleItemScrollOffset = viewModel.bookmarksScrollOffset
+        initialFirstVisibleItemIndex = initialScrollPos.first,
+        initialFirstVisibleItemScrollOffset = initialScrollPos.second
     )
 
-    // Continuously remember user's scroll position
+    // Continuously remember user's scroll position when active
     LaunchedEffect(listState) {
         snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }
             .collect { (index, offset) ->
-                viewModel.bookmarksScrollIndex = index
-                viewModel.bookmarksScrollOffset = offset
+                if (viewModel.navState.value.currentScreen is ScreenState.Bookmarks) {
+                    viewModel.saveScrollPosition("bookmarks", index, offset)
+                }
             }
     }
 

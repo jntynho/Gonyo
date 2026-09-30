@@ -43,15 +43,19 @@ sealed class ScreenState {
     object Bookmarks : ScreenState()
     data class AddEditLink(val linkId: String? = null) : ScreenState()
     object Actors : ScreenState()
-    data class AddEditActor(val actorId: String? = null) : ScreenState()
     data class ActorScenes(val actorId: String) : ScreenState()
     object Studios : ScreenState()
-    data class AddEditStudio(val studioId: String? = null) : ScreenState()
     data class StudioScenes(val studioId: String) : ScreenState()
     data class PhotosetViewer(val title: String, val images: List<String>, val initialIndex: Int = 0) : ScreenState()
     object StashDb : ScreenState()
     object Settings : ScreenState()
 }
+
+// Unified Navigation State (screen + direction) for atomic, race-condition-free transitions
+data class NavState(
+    val currentScreen: ScreenState = ScreenState.Home,
+    val direction: MainViewModel.NavigationDirection = MainViewModel.NavigationDirection.FORWARD
+)
 
 data class ActiveVideoPlayback(
     val title: String,
@@ -123,23 +127,42 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         FORWARD, BACK
     }
 
-    private val _navDirection = MutableStateFlow(NavigationDirection.FORWARD)
-    val navDirection: StateFlow<NavigationDirection> = _navDirection.asStateFlow()
-
-    private val _screenState = MutableStateFlow<ScreenState>(ScreenState.Home)
-    val screenState: StateFlow<ScreenState> = _screenState.asStateFlow()
-
     private val screenStack = mutableListOf<ScreenState>(ScreenState.Home)
+
+    private val _navState = MutableStateFlow(NavState(ScreenState.Home, NavigationDirection.FORWARD))
+    val navState: StateFlow<NavState> = _navState.asStateFlow()
+
+    val screenState: StateFlow<ScreenState> = _navState.map { it.currentScreen }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, ScreenState.Home)
+
+    val navDirection: StateFlow<NavigationDirection> = _navState.map { it.direction }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, NavigationDirection.FORWARD)
 
     private val _canNavigateBack = MutableStateFlow(false)
     val canNavigateBack: StateFlow<Boolean> = _canNavigateBack.asStateFlow()
 
-    // Home & Bookmarks Scroll Position Memory
-    var homeScrollIndex: Int = 0
-    var homeScrollOffset: Int = 0
-    var bookmarksScrollIndex: Int = 0
-    var bookmarksScrollOffset: Int = 0
+    // Key-based Scroll Position Memory (e.g. "home", "actor:<id>", "studio:<id>", "bookmarks")
+    private val scrollPositions = mutableMapOf<String, Pair<Int, Int>>()
+
+    fun getScrollPosition(key: String): Pair<Int, Int> = scrollPositions[key] ?: (0 to 0)
+
+    fun saveScrollPosition(key: String, index: Int, offset: Int) {
+        scrollPositions[key] = index to offset
+    }
+
     var initialSettingsSection: String? = null
+    private var lastNavTimestamp = 0L
+
+    fun initStartScreen(startScreen: String?, startSection: String?) {
+        if (startScreen == "settings") {
+            initialSettingsSection = startSection
+            screenStack.clear()
+            screenStack.add(ScreenState.Home)
+            screenStack.add(ScreenState.Settings)
+            _navState.value = NavState(ScreenState.Settings, NavigationDirection.FORWARD)
+            _canNavigateBack.value = true
+        }
+    }
 
     private fun isTopLevelScreen(screen: ScreenState): Boolean {
         return screen is ScreenState.Home ||
@@ -161,54 +184,61 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun navigateTo(screen: ScreenState) {
-        if (screen == _screenState.value) return
-        
+        val current = _navState.value.currentScreen
+        if (screen == current) return
+
+        val now = System.currentTimeMillis()
+        if (now - lastNavTimestamp < 150L) return
+        lastNavTimestamp = now
+
         // Cleanly stop any playing inline card video before starting transition
         _activeInlineVideo.value = null
 
         if (screen is ScreenState.Home) {
-            _navDirection.value = NavigationDirection.BACK
             screenStack.clear()
             screenStack.add(ScreenState.Home)
-            _screenState.value = ScreenState.Home
+            _navState.value = NavState(ScreenState.Home, NavigationDirection.BACK)
             _canNavigateBack.value = false
             return
         }
 
-        val current = _screenState.value
         if (isTopLevelScreen(current) && isTopLevelScreen(screen)) {
             // Lateral transition between top-level drawer items
             val currentRank = getDrawerScreenIndex(current)
             val targetRank = getDrawerScreenIndex(screen)
-            _navDirection.value = if (targetRank < currentRank) NavigationDirection.BACK else NavigationDirection.FORWARD
+            val dir = if (targetRank < currentRank) NavigationDirection.BACK else NavigationDirection.FORWARD
             screenStack.clear()
             screenStack.add(ScreenState.Home)
             screenStack.add(screen)
-            _screenState.value = screen
+            _navState.value = NavState(screen, dir)
             _canNavigateBack.value = true
             return
         }
 
         val existingIndex = screenStack.indexOf(screen)
-        if (existingIndex >= 0 && existingIndex < screenStack.size - 1) {
-            _navDirection.value = NavigationDirection.BACK
+        val dir = if (existingIndex >= 0 && existingIndex < screenStack.size - 1) {
             while (screenStack.size > existingIndex + 1) {
                 screenStack.removeAt(screenStack.size - 1)
             }
+            NavigationDirection.BACK
         } else {
-            _navDirection.value = NavigationDirection.FORWARD
             screenStack.add(screen)
+            NavigationDirection.FORWARD
         }
-        _screenState.value = screen
+        _navState.value = NavState(screen, dir)
         _canNavigateBack.value = screenStack.size > 1
     }
 
     fun navigateBack(): Boolean {
+        val now = System.currentTimeMillis()
+        if (now - lastNavTimestamp < 150L) return false
+        lastNavTimestamp = now
+
         _activeInlineVideo.value = null
         if (screenStack.size > 1) {
-            _navDirection.value = NavigationDirection.BACK
             screenStack.removeAt(screenStack.size - 1)
-            _screenState.value = screenStack.last()
+            val target = screenStack.last()
+            _navState.value = NavState(target, NavigationDirection.BACK)
             _canNavigateBack.value = screenStack.size > 1
             return true
         }

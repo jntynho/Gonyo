@@ -43,6 +43,7 @@ import com.example.ui.components.DataBackupSection
 import com.example.ui.components.IntegrationsDropdownDebridSection
 import com.example.ui.components.NativeThemeSelector
 import com.example.ui.theme.LocalAccentColor
+import com.example.ui.theme.MotionTokens
 import com.example.ui.theme.LocalVaultPalette
 import com.example.ui.theme.parseHexColor
 import kotlinx.coroutines.launch
@@ -154,19 +155,19 @@ fun SettingsScreen(
             targetState = currentSection,
             transitionSpec = {
                 if (targetState != SettingsSection.MAIN_MENU) {
-                    (fadeIn(animationSpec = androidx.compose.animation.core.tween(220, easing = androidx.compose.animation.core.LinearOutSlowInEasing)) +
-                            slideInHorizontally(animationSpec = androidx.compose.animation.core.tween(240, easing = androidx.compose.animation.core.FastOutSlowInEasing)) { width -> width / 4 })
+                    (fadeIn(animationSpec = androidx.compose.animation.core.tween(MotionTokens.DurationMedium, easing = MotionTokens.EasingEmphasizedDecelerate)) +
+                            slideInHorizontally(animationSpec = androidx.compose.animation.core.tween(MotionTokens.DurationMedium, easing = MotionTokens.EasingStandard)) { width -> width / MotionTokens.SlideFractionHorizontal })
                         .togetherWith(
-                            fadeOut(animationSpec = androidx.compose.animation.core.tween(180, easing = androidx.compose.animation.core.FastOutLinearInEasing)) +
-                                    slideOutHorizontally(animationSpec = androidx.compose.animation.core.tween(200, easing = androidx.compose.animation.core.FastOutLinearInEasing)) { width -> -width / 10 }
+                            fadeOut(animationSpec = androidx.compose.animation.core.tween(MotionTokens.DurationShort, easing = MotionTokens.EasingEmphasizedAccelerate)) +
+                                    slideOutHorizontally(animationSpec = androidx.compose.animation.core.tween(MotionTokens.DurationShort, easing = MotionTokens.EasingEmphasizedAccelerate)) { width -> -width / MotionTokens.SlideFractionHorizontal }
                         )
                         .apply { targetContentZIndex = 1f }
                 } else {
-                    (fadeIn(animationSpec = androidx.compose.animation.core.tween(220, easing = androidx.compose.animation.core.LinearOutSlowInEasing)) +
-                            slideInHorizontally(animationSpec = androidx.compose.animation.core.tween(240, easing = androidx.compose.animation.core.FastOutSlowInEasing)) { width -> -width / 10 })
+                    (fadeIn(animationSpec = androidx.compose.animation.core.tween(MotionTokens.DurationMedium, easing = MotionTokens.EasingEmphasizedDecelerate)) +
+                            slideInHorizontally(animationSpec = androidx.compose.animation.core.tween(MotionTokens.DurationMedium, easing = MotionTokens.EasingStandard)) { width -> -width / MotionTokens.SlideFractionHorizontal })
                         .togetherWith(
-                            fadeOut(animationSpec = androidx.compose.animation.core.tween(180, easing = androidx.compose.animation.core.FastOutLinearInEasing)) +
-                                    slideOutHorizontally(animationSpec = androidx.compose.animation.core.tween(220, easing = androidx.compose.animation.core.FastOutLinearInEasing)) { width -> width / 4 }
+                            fadeOut(animationSpec = androidx.compose.animation.core.tween(MotionTokens.DurationShort, easing = MotionTokens.EasingEmphasizedAccelerate)) +
+                                    slideOutHorizontally(animationSpec = androidx.compose.animation.core.tween(MotionTokens.DurationShort, easing = MotionTokens.EasingEmphasizedAccelerate)) { width -> width / MotionTokens.SlideFractionHorizontal }
                         )
                         .apply { targetContentZIndex = 0f }
                 }

@@ -223,6 +223,7 @@ fun ExoPlayerOverlay(
     // Auto rotate to landscape if requested from inline player transition
     LaunchedEffect(startInLandscape) {
         if (startInLandscape) {
+            delay(150)
             activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         }
     }

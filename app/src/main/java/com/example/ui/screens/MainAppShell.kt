@@ -1,10 +1,8 @@
 package com.example.ui.screens
 
-import androidx.activity.compose.BackHandler
+import androidx.activity.BackEventCompat
+import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.animation.*
-import androidx.compose.animation.core.FastOutLinearInEasing
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -20,6 +18,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -36,6 +35,7 @@ import com.example.ui.components.PhotosetLightbox
 import com.example.ui.components.SmoothProgressIndicator
 import com.example.ui.theme.LocalAccentColor
 import com.example.ui.theme.LocalVaultPalette
+import com.example.ui.theme.MotionTokens
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -46,8 +46,8 @@ fun MainAppShell(viewModel: MainViewModel) {
     val coroutineScope = rememberCoroutineScope()
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
 
-    val currentScreen by viewModel.screenState.collectAsStateWithLifecycle()
-    val navDirection by viewModel.navDirection.collectAsStateWithLifecycle()
+    val navState by viewModel.navState.collectAsStateWithLifecycle()
+    val currentScreen = navState.currentScreen
     val activeVideo by viewModel.activeVideo.collectAsStateWithLifecycle()
     val activeLightbox by viewModel.activeLightbox.collectAsStateWithLifecycle()
     val resolvingStatus by viewModel.resolvingVideoStatus.collectAsStateWithLifecycle()
@@ -56,7 +56,22 @@ fun MainAppShell(viewModel: MainViewModel) {
     val currentSettings by viewModel.settings.collectAsStateWithLifecycle()
     val transitionStyle = currentSettings.transitionStyle
 
-    // Smooth App Launch Entrance Animation (Matches Add Scene motion)
+    // Retain non-null overlay state so composing during exit animation does not collapse
+    var lastActiveVideo by remember { mutableStateOf<ActiveVideoPlayback?>(null) }
+    LaunchedEffect(activeVideo) {
+        if (activeVideo != null) {
+            lastActiveVideo = activeVideo
+        }
+    }
+
+    var lastActiveLightbox by remember { mutableStateOf<Pair<List<String>, Int>?>(null) }
+    LaunchedEffect(activeLightbox) {
+        if (activeLightbox != null) {
+            lastActiveLightbox = activeLightbox
+        }
+    }
+
+    // Smooth App Launch Entrance Animation
     var appEntranceVisible by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
         appEntranceVisible = true
@@ -65,16 +80,29 @@ fun MainAppShell(viewModel: MainViewModel) {
     val canNavigateBack by viewModel.canNavigateBack.collectAsStateWithLifecycle()
     val isBackHandlingActive = activeLightbox != null || activeVideo != null || drawerState.isOpen || canNavigateBack
 
-    // Handle back button press cleanly without trapping the user at root
-    BackHandler(enabled = isBackHandlingActive) {
-        if (activeLightbox != null) {
-            viewModel.closeLightbox()
-        } else if (activeVideo != null) {
-            viewModel.closeVideo()
-        } else if (drawerState.isOpen) {
-            coroutineScope.launch { drawerState.close() }
-        } else {
-            viewModel.navigateBack()
+    // Predictive Back Gesture state
+    var predictiveBackProgress by remember { mutableFloatStateOf(0f) }
+    var predictiveBackSwipeEdge by remember { mutableIntStateOf(0) }
+
+    // Predictive Back Handling with clean priority chain
+    PredictiveBackHandler(enabled = isBackHandlingActive) { progressFlow ->
+        try {
+            progressFlow.collect { backEvent ->
+                predictiveBackProgress = backEvent.progress
+                predictiveBackSwipeEdge = backEvent.swipeEdge
+            }
+            predictiveBackProgress = 0f
+            if (activeLightbox != null) {
+                viewModel.closeLightbox()
+            } else if (activeVideo != null) {
+                viewModel.closeVideo()
+            } else if (drawerState.isOpen) {
+                coroutineScope.launch { drawerState.close() }
+            } else {
+                viewModel.navigateBack()
+            }
+        } catch (e: Exception) {
+            predictiveBackProgress = 0f
         }
     }
 
@@ -126,8 +154,10 @@ fun MainAppShell(viewModel: MainViewModel) {
                         label = { Text("Home", fontWeight = if (isHomeSelected) FontWeight.SemiBold else FontWeight.Normal) },
                         selected = isHomeSelected,
                         onClick = {
-                            viewModel.navigateTo(ScreenState.Home)
-                            coroutineScope.launch { drawerState.close() }
+                            coroutineScope.launch {
+                                drawerState.close()
+                                viewModel.navigateTo(ScreenState.Home)
+                            }
                         },
                         colors = NavigationDrawerItemDefaults.colors(
                             selectedContainerColor = accent.copy(alpha = 0.18f),
@@ -152,8 +182,10 @@ fun MainAppShell(viewModel: MainViewModel) {
                         label = { Text("Actor", fontWeight = if (isActorsSelected) FontWeight.SemiBold else FontWeight.Normal) },
                         selected = isActorsSelected,
                         onClick = {
-                            viewModel.navigateTo(ScreenState.Actors)
-                            coroutineScope.launch { drawerState.close() }
+                            coroutineScope.launch {
+                                drawerState.close()
+                                viewModel.navigateTo(ScreenState.Actors)
+                            }
                         },
                         colors = NavigationDrawerItemDefaults.colors(
                             selectedContainerColor = accent.copy(alpha = 0.18f),
@@ -178,8 +210,10 @@ fun MainAppShell(viewModel: MainViewModel) {
                         label = { Text("Studio", fontWeight = if (isStudiosSelected) FontWeight.SemiBold else FontWeight.Normal) },
                         selected = isStudiosSelected,
                         onClick = {
-                            viewModel.navigateTo(ScreenState.Studios)
-                            coroutineScope.launch { drawerState.close() }
+                            coroutineScope.launch {
+                                drawerState.close()
+                                viewModel.navigateTo(ScreenState.Studios)
+                            }
                         },
                         colors = NavigationDrawerItemDefaults.colors(
                             selectedContainerColor = accent.copy(alpha = 0.18f),
@@ -204,8 +238,10 @@ fun MainAppShell(viewModel: MainViewModel) {
                         label = { Text("Bookmark", fontWeight = if (isBookmarksSelected) FontWeight.SemiBold else FontWeight.Normal) },
                         selected = isBookmarksSelected,
                         onClick = {
-                            viewModel.navigateTo(ScreenState.Bookmarks)
-                            coroutineScope.launch { drawerState.close() }
+                            coroutineScope.launch {
+                                drawerState.close()
+                                viewModel.navigateTo(ScreenState.Bookmarks)
+                            }
                         },
                         colors = NavigationDrawerItemDefaults.colors(
                             selectedContainerColor = accent.copy(alpha = 0.18f),
@@ -230,8 +266,10 @@ fun MainAppShell(viewModel: MainViewModel) {
                         label = { Text("StashDb", fontWeight = if (isStashDbSelected) FontWeight.SemiBold else FontWeight.Normal) },
                         selected = isStashDbSelected,
                         onClick = {
-                            viewModel.navigateTo(ScreenState.StashDb)
-                            coroutineScope.launch { drawerState.close() }
+                            coroutineScope.launch {
+                                drawerState.close()
+                                viewModel.navigateTo(ScreenState.StashDb)
+                            }
                         },
                         colors = NavigationDrawerItemDefaults.colors(
                             selectedContainerColor = accent.copy(alpha = 0.18f),
@@ -260,8 +298,10 @@ fun MainAppShell(viewModel: MainViewModel) {
                         label = { Text("Settings & Sync", fontWeight = if (isSettingsSelected) FontWeight.SemiBold else FontWeight.Normal) },
                         selected = isSettingsSelected,
                         onClick = {
-                            viewModel.navigateTo(ScreenState.Settings)
-                            coroutineScope.launch { drawerState.close() }
+                            coroutineScope.launch {
+                                drawerState.close()
+                                viewModel.navigateTo(ScreenState.Settings)
+                            }
                         },
                         colors = NavigationDrawerItemDefaults.colors(
                             selectedContainerColor = accent.copy(alpha = 0.18f),
@@ -279,80 +319,100 @@ fun MainAppShell(viewModel: MainViewModel) {
     ) {
         AnimatedVisibility(
             visible = appEntranceVisible,
-            enter = fadeIn(animationSpec = tween(320, easing = LinearOutSlowInEasing)),
+            enter = fadeIn(animationSpec = tween(MotionTokens.DurationLong, easing = MotionTokens.EasingEmphasizedDecelerate)),
             modifier = Modifier.fillMaxSize()
         ) {
-            Box(modifier = Modifier.fillMaxSize()) {
-                Column(modifier = Modifier.fillMaxSize()) {
-                    // Active Screen View with Smooth Motion Transitions
-                    Box(modifier = Modifier.fillMaxSize()) {
-                        AnimatedContent(
-                            targetState = currentScreen,
-                            transitionSpec = {
-                                val isBack = navDirection == MainViewModel.NavigationDirection.BACK
-                                val contentZIndex = if (isBack) 0f else 1f
-                                when (transitionStyle) {
-                                    4 -> {
-                                        // Option 4: Vertical Slide v2 (lighter fade-through vertical slide)
-                                        (fadeIn(tween(220, easing = LinearOutSlowInEasing)) +
-                                            slideInVertically(tween(260, easing = FastOutSlowInEasing)) { h ->
-                                                if (isBack) -h / 20 else h / 16
-                                            })
+            // Root solid background container to prevent any flicker through
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(palette.bg)
+            ) {
+                // Predictive Back Interactive Transform Container
+                val screenScale = 1f - (0.05f * predictiveBackProgress)
+                val screenTransX = if (predictiveBackSwipeEdge == BackEventCompat.EDGE_RIGHT) {
+                    -24f * predictiveBackProgress
+                } else {
+                    24f * predictiveBackProgress
+                }
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            scaleX = screenScale
+                            scaleY = screenScale
+                            translationX = screenTransX
+                        }
+                ) {
+                    AnimatedContent(
+                        targetState = currentScreen,
+                        transitionSpec = {
+                            val isBack = navState.direction == MainViewModel.NavigationDirection.BACK
+                            val contentZIndex = if (isBack) 0f else 1f
+                            when (transitionStyle) {
+                                4 -> {
+                                    // Option 4: Vertical Slide v2 (lighter fade-through vertical slide)
+                                    (fadeIn(tween(MotionTokens.DurationMedium, easing = MotionTokens.EasingEmphasizedDecelerate)) +
+                                        slideInVertically(tween(MotionTokens.DurationLong, easing = MotionTokens.EasingStandard)) { h ->
+                                            if (isBack) -h / MotionTokens.SlideFractionSubtleVertical else h / MotionTokens.SlideFractionSubtle
+                                        })
+                                        .togetherWith(
+                                            fadeOut(tween(MotionTokens.DurationShort, easing = MotionTokens.EasingEmphasizedAccelerate)) +
+                                            slideOutVertically(tween(MotionTokens.DurationMedium, easing = MotionTokens.EasingEmphasizedAccelerate)) { h ->
+                                                if (isBack) h / MotionTokens.SlideFractionSubtle else -h / MotionTokens.SlideFractionSubtleVertical
+                                            }
+                                        )
+                                        .apply { targetContentZIndex = contentZIndex }
+                                }
+                                1 -> {
+                                    // Option 1: Fade-Through Slide (Default)
+                                    if (isBack) {
+                                        (fadeIn(animationSpec = tween(MotionTokens.DurationMedium, easing = MotionTokens.EasingEmphasizedDecelerate)) +
+                                                slideInHorizontally(animationSpec = tween(MotionTokens.DurationMedium, easing = MotionTokens.EasingStandard)) { width -> -width / MotionTokens.SlideFractionHorizontal })
                                             .togetherWith(
-                                                fadeOut(tween(160, easing = FastOutLinearInEasing)) +
-                                                slideOutVertically(tween(200, easing = FastOutLinearInEasing)) { h ->
-                                                    if (isBack) h / 16 else -h / 20
-                                                }
+                                                fadeOut(animationSpec = tween(MotionTokens.DurationShort, easing = MotionTokens.EasingEmphasizedAccelerate)) +
+                                                        slideOutHorizontally(animationSpec = tween(MotionTokens.DurationMedium, easing = MotionTokens.EasingEmphasizedAccelerate)) { width -> width / MotionTokens.SlideFractionHorizontal }
                                             )
-                                            .apply { targetContentZIndex = contentZIndex }
-                                    }
-                                    1 -> {
-                                        // Option 1: Fade-Through Slide
-                                        if (isBack) {
-                                            (fadeIn(animationSpec = tween(220, easing = LinearOutSlowInEasing)) +
-                                                    slideInHorizontally(animationSpec = tween(240, easing = FastOutSlowInEasing)) { width -> -width / 10 })
-                                                .togetherWith(
-                                                    fadeOut(animationSpec = tween(180, easing = FastOutLinearInEasing)) +
-                                                            slideOutHorizontally(animationSpec = tween(220, easing = FastOutLinearInEasing)) { width -> width / 10 }
-                                                )
-                                                .apply { targetContentZIndex = 0f }
-                                        } else {
-                                            (fadeIn(animationSpec = tween(240, easing = LinearOutSlowInEasing)) +
-                                                    slideInHorizontally(animationSpec = tween(260, easing = FastOutSlowInEasing)) { width -> width / 10 })
-                                                .togetherWith(
-                                                    fadeOut(animationSpec = tween(180, easing = FastOutLinearInEasing)) +
-                                                            slideOutHorizontally(animationSpec = tween(220, easing = FastOutLinearInEasing)) { width -> -width / 10 }
-                                                )
-                                                .apply { targetContentZIndex = 1f }
-                                        }
-                                    }
-                                    else -> {
-                                        // Option 0: Vertical Slide v2
-                                        if (isBack) {
-                                            (slideInVertically(animationSpec = tween(280, easing = FastOutSlowInEasing)) { fullHeight -> -fullHeight / 10 } +
-                                                    fadeIn(animationSpec = tween(240)))
-                                                .togetherWith(
-                                                    slideOutVertically(animationSpec = tween(300, easing = FastOutSlowInEasing)) { fullHeight -> fullHeight / 8 } +
-                                                            fadeOut(animationSpec = tween(240))
-                                                )
-                                                .apply { targetContentZIndex = 0f }
-                                        } else {
-                                            (slideInVertically(animationSpec = tween(320, easing = FastOutSlowInEasing)) { fullHeight -> fullHeight / 8 } +
-                                                    fadeIn(animationSpec = tween(280)))
-                                                .togetherWith(
-                                                    slideOutVertically(animationSpec = tween(280, easing = FastOutSlowInEasing)) { fullHeight -> -fullHeight / 10 } +
-                                                            fadeOut(animationSpec = tween(220))
-                                                )
-                                                .apply { targetContentZIndex = 1f }
-                                        }
+                                            .apply { targetContentZIndex = 0f }
+                                    } else {
+                                        (fadeIn(animationSpec = tween(MotionTokens.DurationMedium, easing = MotionTokens.EasingEmphasizedDecelerate)) +
+                                                slideInHorizontally(animationSpec = tween(MotionTokens.DurationLong, easing = MotionTokens.EasingStandard)) { width -> width / MotionTokens.SlideFractionHorizontal })
+                                            .togetherWith(
+                                                fadeOut(animationSpec = tween(MotionTokens.DurationShort, easing = MotionTokens.EasingEmphasizedAccelerate)) +
+                                                        slideOutHorizontally(animationSpec = tween(MotionTokens.DurationMedium, easing = MotionTokens.EasingEmphasizedAccelerate)) { width -> -width / MotionTokens.SlideFractionHorizontal }
+                                            )
+                                            .apply { targetContentZIndex = 1f }
                                     }
                                 }
-                            },
-                            label = "screen_motion_transition"
-                        ) { screen ->
+                                else -> {
+                                    // Option 0: Vertical Slide v2
+                                    if (isBack) {
+                                        (slideInVertically(animationSpec = tween(MotionTokens.DurationLong, easing = MotionTokens.EasingStandard)) { fullHeight -> -fullHeight / MotionTokens.SlideFractionHorizontal } +
+                                                fadeIn(animationSpec = tween(MotionTokens.DurationMedium, easing = MotionTokens.EasingEmphasizedDecelerate)))
+                                            .togetherWith(
+                                                slideOutVertically(animationSpec = tween(MotionTokens.DurationExtraLong, easing = MotionTokens.EasingStandard)) { fullHeight -> fullHeight / MotionTokens.SlideFractionVertical } +
+                                                        fadeOut(animationSpec = tween(MotionTokens.DurationMedium, easing = MotionTokens.EasingEmphasizedAccelerate))
+                                            )
+                                            .apply { targetContentZIndex = 0f }
+                                    } else {
+                                        (slideInVertically(animationSpec = tween(MotionTokens.DurationExtraLong, easing = MotionTokens.EasingStandard)) { fullHeight -> fullHeight / MotionTokens.SlideFractionVertical } +
+                                                fadeIn(animationSpec = tween(MotionTokens.DurationLong, easing = MotionTokens.EasingEmphasizedDecelerate)))
+                                            .togetherWith(
+                                                slideOutVertically(animationSpec = tween(MotionTokens.DurationLong, easing = MotionTokens.EasingStandard)) { fullHeight -> -fullHeight / MotionTokens.SlideFractionHorizontal } +
+                                                        fadeOut(animationSpec = tween(MotionTokens.DurationMedium, easing = MotionTokens.EasingEmphasizedAccelerate))
+                                            )
+                                            .apply { targetContentZIndex = 1f }
+                                    }
+                                }
+                            }
+                        },
+                        label = "screen_motion_transition"
+                    ) { screen ->
                         when (screen) {
                             is ScreenState.Home -> HomeScreen(
                                 viewModel = viewModel,
+                                screen = screen,
                                 onOpenDrawer = { coroutineScope.launch { drawerState.open() } }
                             )
                             is ScreenState.Bookmarks -> BookmarksScreen(
@@ -361,15 +421,15 @@ fun MainAppShell(viewModel: MainViewModel) {
                             )
                             is ScreenState.AddEditLink -> AddEditLinkScreen(viewModel, screen.linkId)
                             is ScreenState.Actors -> ActorManagementScreen(viewModel)
-                            is ScreenState.AddEditActor -> ActorManagementScreen(viewModel)
                             is ScreenState.ActorScenes -> HomeScreen(
                                 viewModel = viewModel,
+                                screen = screen,
                                 onOpenDrawer = { coroutineScope.launch { drawerState.open() } }
                             )
                             is ScreenState.Studios -> StudioManagementScreen(viewModel)
-                            is ScreenState.AddEditStudio -> StudioManagementScreen(viewModel)
                             is ScreenState.StudioScenes -> HomeScreen(
                                 viewModel = viewModel,
+                                screen = screen,
                                 onOpenDrawer = { coroutineScope.launch { drawerState.open() } }
                             )
                             is ScreenState.PhotosetViewer -> PhotosetViewerScreen(viewModel, screen.title, screen.images, screen.initialIndex)
@@ -381,122 +441,125 @@ fun MainAppShell(viewModel: MainViewModel) {
                         }
                     }
                 }
-            }
 
-            // GoPlayer / ExoPlayer Video Player Overlay
-            AnimatedVisibility(
-                visible = activeVideo != null,
-                enter = fadeIn(tween(240)) + scaleIn(tween(240), initialScale = 0.96f),
-                exit = fadeOut(tween(180)) + scaleOut(tween(180), targetScale = 0.96f)
-            ) {
-                activeVideo?.let { video ->
-                    GoPlayer(
-                        title = video.title,
-                        qualities = video.qualities,
-                        subtitles = video.subtitles,
-                        defaultHeaders = video.headers,
-                        initialPositionMs = video.initialPositionMs,
-                        startInLandscape = video.startInLandscape,
-                        exoPlayer = viewModel.sharedPlayerManager.getPlayer(),
-                        onClose = { viewModel.closeVideo() }
-                    )
+                // GoPlayer / ExoPlayer Video Player Overlay (Retains non-null instance during exit animation)
+                AnimatedVisibility(
+                    visible = activeVideo != null,
+                    enter = fadeIn(tween(MotionTokens.DurationMedium)) + scaleIn(tween(MotionTokens.DurationMedium), initialScale = MotionTokens.ScaleOverlayInitial),
+                    exit = fadeOut(tween(MotionTokens.DurationShort)) + scaleOut(tween(MotionTokens.DurationShort), targetScale = MotionTokens.ScaleOverlayInitial)
+                ) {
+                    lastActiveVideo?.let { video ->
+                        GoPlayer(
+                            title = video.title,
+                            qualities = video.qualities,
+                            subtitles = video.subtitles,
+                            defaultHeaders = video.headers,
+                            initialPositionMs = video.initialPositionMs,
+                            startInLandscape = video.startInLandscape,
+                            exoPlayer = viewModel.sharedPlayerManager.getPlayer(),
+                            onClose = { viewModel.closeVideo() }
+                        )
+                    }
                 }
-            }
 
-            // High-Res Photoset Lightbox Overlay
-            AnimatedVisibility(
-                visible = activeLightbox != null,
-                enter = fadeIn(tween(240)) + scaleIn(tween(240), initialScale = 0.96f),
-                exit = fadeOut(tween(180)) + scaleOut(tween(180), targetScale = 0.96f)
-            ) {
-                activeLightbox?.let { (images, startIndex) ->
-                    PhotosetLightbox(
-                        images = images,
-                        initialIndex = startIndex,
-                        onClose = { viewModel.closeLightbox() }
-                    )
+                // High-Res Photoset Lightbox Overlay (Retains non-null instance during exit animation)
+                AnimatedVisibility(
+                    visible = activeLightbox != null,
+                    enter = fadeIn(tween(MotionTokens.DurationMedium)) + scaleIn(tween(MotionTokens.DurationMedium), initialScale = MotionTokens.ScaleOverlayInitial),
+                    exit = fadeOut(tween(MotionTokens.DurationShort)) + scaleOut(tween(MotionTokens.DurationShort), targetScale = MotionTokens.ScaleOverlayInitial)
+                ) {
+                    lastActiveLightbox?.let { (images, startIndex) ->
+                        PhotosetLightbox(
+                            images = images,
+                            initialIndex = startIndex,
+                            onClose = { viewModel.closeLightbox() }
+                        )
+                    }
                 }
-            }
 
-            // Video Resolving / Debrid Progress Overlay (Only for non-card actions, cards handle inline)
-            if (resolvingCardId == null) {
-                resolvingStatus?.let { statusText ->
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(Color.Black.copy(alpha = 0.6f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Card(
+                // Video Resolving / Debrid Progress Overlay (Animated smooth fade in/out)
+                AnimatedVisibility(
+                    visible = resolvingCardId == null && resolvingStatus != null,
+                    enter = fadeIn(tween(MotionTokens.DurationShort)),
+                    exit = fadeOut(tween(MotionTokens.DurationShort))
+                ) {
+                    resolvingStatus?.let { statusText ->
+                        Box(
                             modifier = Modifier
-                                .widthIn(max = 320.dp)
-                                .padding(20.dp),
-                            shape = RoundedCornerShape(16.dp),
-                            colors = CardDefaults.cardColors(containerColor = palette.surface)
+                                .fillMaxSize()
+                                .background(Color.Black.copy(alpha = 0.6f)),
+                            contentAlignment = Alignment.Center
                         ) {
-                            Column(
-                                modifier = Modifier.padding(20.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(14.dp)
+                            Card(
+                                modifier = Modifier
+                                    .widthIn(max = 320.dp)
+                                    .padding(20.dp),
+                                shape = RoundedCornerShape(16.dp),
+                                colors = CardDefaults.cardColors(containerColor = palette.surface)
                             ) {
-                                SmoothProgressIndicator(
-                                    modifier = Modifier.size(44.dp),
-                                    color = accent,
-                                    strokeWidth = 3.5.dp
-                                )
-                                Text(
-                                    text = statusText,
-                                    color = palette.textPrimary,
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                                )
+                                Column(
+                                    modifier = Modifier.padding(20.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                                ) {
+                                    SmoothProgressIndicator(
+                                        modifier = Modifier.size(44.dp),
+                                        color = accent,
+                                        strokeWidth = 3.5.dp
+                                    )
+                                    Text(
+                                        text = statusText,
+                                        color = palette.textPrimary,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                    )
+                                }
                             }
                         }
                     }
                 }
-            }
 
-            // Video Resolution / Debrid Error Dialog (Only shown globally if not triggered by an inline card)
-            if (resolvingCardId == null) {
-                videoResolutionError?.let { errText ->
-                    AlertDialog(
-                        onDismissRequest = { viewModel.dismissVideoError() },
-                        icon = {
-                            Icon(
-                                Icons.Default.ErrorOutline,
-                                contentDescription = null,
-                                tint = Color(0xFFEF4444),
-                                modifier = Modifier.size(36.dp)
-                            )
-                        },
-                        title = {
-                            Text(
-                                text = "Stream Playback Error",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 16.sp
-                            )
-                        },
-                        text = {
-                            Text(
-                                text = errText,
-                                fontSize = 13.sp,
-                                lineHeight = 18.sp,
-                                color = palette.textSecondary
-                            )
-                        },
-                        confirmButton = {
-                            Button(
-                                onClick = { viewModel.dismissVideoError() },
-                                colors = ButtonDefaults.buttonColors(containerColor = accent)
-                            ) {
-                                Text("OK")
+                // Video Resolution / Debrid Error Dialog
+                if (resolvingCardId == null) {
+                    videoResolutionError?.let { errText ->
+                        AlertDialog(
+                            onDismissRequest = { viewModel.dismissVideoError() },
+                            icon = {
+                                Icon(
+                                    Icons.Default.ErrorOutline,
+                                    contentDescription = null,
+                                    tint = Color(0xFFEF4444),
+                                    modifier = Modifier.size(36.dp)
+                                )
+                            },
+                            title = {
+                                Text(
+                                    text = "Stream Playback Error",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 16.sp
+                                )
+                            },
+                            text = {
+                                Text(
+                                    text = errText,
+                                    fontSize = 13.sp,
+                                    lineHeight = 18.sp,
+                                    color = palette.textSecondary
+                                )
+                            },
+                            confirmButton = {
+                                Button(
+                                    onClick = { viewModel.dismissVideoError() },
+                                    colors = ButtonDefaults.buttonColors(containerColor = accent)
+                                ) {
+                                    Text("OK")
+                                }
                             }
-                        }
-                    )
+                        )
+                    }
                 }
             }
         }
     }
-}
 }

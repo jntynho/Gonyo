@@ -54,13 +54,19 @@ class MainActivity : ComponentActivity() {
             val settings by viewModel.settings.collectAsStateWithLifecycle()
             val safeSettings = settings ?: com.example.data.local.entity.SettingsEntity()
 
+            // Initialize startup screen directly in ViewModel without triggering a secondary transition
             LaunchedEffect(Unit) {
                 val startScreen = intent?.getStringExtra("start_screen")
-                if (startScreen == "settings") {
-                    val startSection = intent?.getStringExtra("start_section")
-                    viewModel.initialSettingsSection = startSection
-                    viewModel.navigateTo(ScreenState.Settings)
+                val startSection = intent?.getStringExtra("start_section")
+                if (startScreen != null) {
+                    viewModel.initStartScreen(startScreen, startSection)
                 }
+            }
+
+            // Sync window background with active theme to eliminate dark flash on light theme cold launch
+            LaunchedEffect(safeSettings.currentTheme) {
+                val isLight = safeSettings.currentTheme.equals("Light", ignoreCase = true)
+                window.decorView.setBackgroundColor(if (isLight) 0xFFF7F7F8.toInt() else 0xFF1E1E22.toInt())
             }
 
             GVJVaultTheme(

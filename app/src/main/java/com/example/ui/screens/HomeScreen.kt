@@ -72,6 +72,7 @@ import com.example.ui.theme.privacyImageBlur
 @Composable
 fun HomeScreen(
     viewModel: MainViewModel,
+    screen: ScreenState = ScreenState.Home,
     onOpenDrawer: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -86,30 +87,29 @@ fun HomeScreen(
     val resolvingCardId by viewModel.resolvingCardId.collectAsStateWithLifecycle()
     val videoResolutionError by viewModel.videoResolutionError.collectAsStateWithLifecycle()
     val activeInlineVideo by viewModel.activeInlineVideo.collectAsStateWithLifecycle()
-    val currentScreen by viewModel.screenState.collectAsStateWithLifecycle()
 
-    val targetActor = remember(currentScreen, actors) {
-        if (currentScreen is ScreenState.ActorScenes) {
-            val id = (currentScreen as ScreenState.ActorScenes).actorId
+    val targetActor = remember(screen, actors) {
+        if (screen is ScreenState.ActorScenes) {
+            val id = screen.actorId
             actors.firstOrNull { it.id == id }
         } else null
     }
 
-    val targetStudio = remember(currentScreen, studios) {
-        if (currentScreen is ScreenState.StudioScenes) {
-            val id = (currentScreen as ScreenState.StudioScenes).studioId
+    val targetStudio = remember(screen, studios) {
+        if (screen is ScreenState.StudioScenes) {
+            val id = screen.studioId
             studios.firstOrNull { it.id == id }
         } else null
     }
 
-    val displayedLinks = remember(links, currentScreen, targetActor, targetStudio) {
-        when (currentScreen) {
+    val displayedLinks = remember(links, screen, targetActor, targetStudio) {
+        when (screen) {
             is ScreenState.ActorScenes -> {
-                val actorId = (currentScreen as ScreenState.ActorScenes).actorId
+                val actorId = screen.actorId
                 links.filter { it.actorIds.contains(actorId) || (targetActor != null && it.actorIds.contains(targetActor.name)) }
             }
             is ScreenState.StudioScenes -> {
-                val studioId = (currentScreen as ScreenState.StudioScenes).studioId
+                val studioId = screen.studioId
                 links.filter { it.studioIds.contains(studioId) || (targetStudio != null && it.studioIds.contains(targetStudio.name)) }
             }
             else -> links
@@ -139,17 +139,27 @@ fun HomeScreen(
         viewModel.searchQuery.value = ""
     }
 
+    val scrollKey = remember(screen) {
+        when (screen) {
+            is ScreenState.ActorScenes -> "actor:${screen.actorId}"
+            is ScreenState.StudioScenes -> "studio:${screen.studioId}"
+            else -> "home"
+        }
+    }
+
+    val initialScrollPos = remember(scrollKey) { viewModel.getScrollPosition(scrollKey) }
     val listState = rememberLazyListState(
-        initialFirstVisibleItemIndex = viewModel.homeScrollIndex,
-        initialFirstVisibleItemScrollOffset = viewModel.homeScrollOffset
+        initialFirstVisibleItemIndex = initialScrollPos.first,
+        initialFirstVisibleItemScrollOffset = initialScrollPos.second
     )
 
-    // Continuously remember the user's exact scroll position in ViewModel
-    LaunchedEffect(listState) {
+    // Continuously remember the user's exact scroll position for this specific screen
+    LaunchedEffect(listState, scrollKey) {
         snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }
             .collect { (index, offset) ->
-                viewModel.homeScrollIndex = index
-                viewModel.homeScrollOffset = offset
+                if (viewModel.navState.value.currentScreen == screen) {
+                    viewModel.saveScrollPosition(scrollKey, index, offset)
+                }
             }
     }
 
@@ -166,10 +176,11 @@ fun HomeScreen(
             previousSort = currentSort
             previousFilter = viewFilter
             previousQuery = searchQuery
-            viewModel.homeScrollIndex = 0
-            viewModel.homeScrollOffset = 0
-            if (links.isNotEmpty()) {
-                listState.scrollToItem(0)
+            if (viewModel.navState.value.currentScreen == screen) {
+                viewModel.saveScrollPosition(scrollKey, 0, 0)
+                if (displayedLinks.isNotEmpty()) {
+                    listState.scrollToItem(0)
+                }
             }
         }
         activeOverlayCardId = null
@@ -226,8 +237,8 @@ fun HomeScreen(
                         )
                     } else {
                         val headerTitle = when {
-                            currentScreen is ScreenState.ActorScenes || targetActor != null -> "Actor Scene"
-                            currentScreen is ScreenState.StudioScenes || targetStudio != null -> "Studio Scene"
+                            screen is ScreenState.ActorScenes || targetActor != null -> "Actor Scene"
+                            screen is ScreenState.StudioScenes || targetStudio != null -> "Studio Scene"
                             else -> "Goony"
                         }
                         Text(
@@ -254,7 +265,7 @@ fun HomeScreen(
                                 contentDescription = "Close Search"
                             )
                         }
-                    } else if (targetActor != null || targetStudio != null || currentScreen is ScreenState.ActorScenes || currentScreen is ScreenState.StudioScenes) {
+                    } else if (targetActor != null || targetStudio != null || screen is ScreenState.ActorScenes || screen is ScreenState.StudioScenes) {
                         IconButton(
                             onClick = { viewModel.navigateBack() },
                             modifier = Modifier.testTag("back_button")
@@ -448,7 +459,7 @@ fun HomeScreen(
                         }
 
                         // Native Add Scene Action - ONLY on Main Screen (Home)
-                        if (currentScreen is ScreenState.Home) {
+                        if (screen is ScreenState.Home) {
                             IconButton(
                                 onClick = { viewModel.navigateTo(ScreenState.AddEditLink()) },
                                 modifier = Modifier.testTag("add_scene_button")
@@ -473,16 +484,16 @@ fun HomeScreen(
         // ========================================================
         // FEED LIST OF ITEMS (MATCHING SCREENSHOT LAYOUT)
         // ========================================================
-        val isEntityScreen = currentScreen is ScreenState.ActorScenes || currentScreen is ScreenState.StudioScenes
+        val isEntityScreen = screen is ScreenState.ActorScenes || screen is ScreenState.StudioScenes
         val entityName = when {
             targetActor != null -> targetActor.name
-            currentScreen is ScreenState.ActorScenes -> {
-                val id = (currentScreen as ScreenState.ActorScenes).actorId
+            screen is ScreenState.ActorScenes -> {
+                val id = screen.actorId
                 actorsMap[id] ?: id
             }
             targetStudio != null -> targetStudio.name
-            currentScreen is ScreenState.StudioScenes -> {
-                val id = (currentScreen as ScreenState.StudioScenes).studioId
+            screen is ScreenState.StudioScenes -> {
+                val id = screen.studioId
                 studiosMap[id] ?: id
             }
             else -> ""
@@ -493,7 +504,7 @@ fun HomeScreen(
             else -> null
         }
         val entityLogoBg = targetStudio?.logoBgColor
-        val isActorEntity = currentScreen is ScreenState.ActorScenes || targetActor != null
+        val isActorEntity = screen is ScreenState.ActorScenes || targetActor != null
 
         if (displayedLinks.isEmpty()) {
             Column(
